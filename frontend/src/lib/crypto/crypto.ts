@@ -234,3 +234,8 @@ export async function decryptVaultItem(
     const json = await decryptString(encryptedData, vaultKey);
     return JSON.parse(json) as VaultItemData;
 }
+
+export function saltFromEmail(email: string): Uint8Array {
+    const normalized = email.trim().toLowerCase();
+    return new TextEncoder().encode(normalized);
+}
