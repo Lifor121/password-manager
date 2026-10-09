@@ -1,5 +1,5 @@
 import { get } from 'svelte/store';
-import { accessToken, clearSession } from '#lib/stores/auth';
+import { accessToken, clearSession } from '$lib/stores/auth';
 
 const API_BASE_URL = '/api';
 
