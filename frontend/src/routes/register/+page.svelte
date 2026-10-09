@@ -6,9 +6,10 @@
     import * as Label from '$lib/components/ui/label/index.js';
     import { authApi, ApiError } from '$lib/api';
     import {
-        saltFromEmail,
-        deriveMasterKey,
-        deriveMasterPasswordHash,
+        generateCryptoSalt,
+        bufferToBase64,
+        deriveAuthHash,
+        deriveEncryptionKey,
         createEncryptedVaultKey
     } from '$lib/crypto/crypto';
 
@@ -22,15 +23,11 @@
 
     function validate(): string | null {
         const trimmed = email.trim();
-        if (!trimmed || !trimmed.includes('@')) {
-            return 'Введите корректный email';
-        }
+        if (!trimmed || !trimmed.includes('@')) return 'Введите корректный email';
         if (password.length < MIN_MASTER_PASSWORD_LENGTH) {
             return `Мастер-пароль должен содержать минимум ${MIN_MASTER_PASSWORD_LENGTH} символов`;
         }
-        if (password !== confirmPassword) {
-            return 'Пароли не совпадают';
-        }
+        if (password !== confirmPassword) return 'Пароли не совпадают';
         return null;
     }
 
@@ -39,48 +36,45 @@
         error = null;
 
         const validationError = validate();
-        if (validationError) {
-            error = validationError;
-            return;
-        }
+        if (validationError) { error = validationError; return; }
 
         loading = true;
         try {
             const normalizedEmail = email.trim().toLowerCase();
-            const salt = saltFromEmail(normalizedEmail);
 
-            // 1. Выводим мастер-ключ (никогда не покидает браузер)
-            const masterKey = await deriveMasterKey(password, salt);
+            // 1. Случайная соль — генерируем здесь и отправляем на сервер.
+            const saltBytes = generateCryptoSalt();
+            const cryptoSaltB64 = bufferToBase64(saltBytes);
 
-            // 2. Выводим хэш для аутентификации на сервере
-            const masterPasswordHash = await deriveMasterPasswordHash(password, salt);
+            // 2. auth_hash → на сервер.
+            const authHash = await deriveAuthHash(password, saltBytes);
 
-            // 3. Генерируем Vault Key и шифруем его мастер-ключом
-            const { encryptedVaultKey } = await createEncryptedVaultKey(masterKey);
+            // 3. encryption_key → локально, шифрует vault_key.
+            const encryptionKey = await deriveEncryptionKey(password, saltBytes);
 
-            // 4. Регистрируемся
+            // 4. Случайный vault_key, зашифрованный encryption_key.
+            const { encryptedVaultKey } = await createEncryptedVaultKey(encryptionKey);
+
+            // 5. Регистрация.
             await authApi.register({
                 email: normalizedEmail,
-                master_password_hash: masterPasswordHash,
-                encrypted_vault_key: encryptedVaultKey
+                master_password_hash: authHash,
+                encrypted_vault_key: encryptedVaultKey,
+                crypto_salt: cryptoSaltB64
             });
 
-            // Стираем чувствительные данные из реактивного состояния
             password = '';
             confirmPassword = '';
 
             await goto('/login?registered=1');
         } catch (err) {
             if (err instanceof ApiError) {
-                if (err.status === 409) {
-                    error = 'Пользователь с таким email уже зарегистрирован';
-                } else if (err.status === 400) {
-                    error = 'Некорректные данные. Проверьте email и попробуйте снова';
-                } else {
-                    error = `Ошибка сервера (${err.status}). Попробуйте позже`;
-                }
+                if (err.status === 409) error = 'Пользователь с таким email уже зарегистрирован';
+                else if (err.status === 422) error = 'Некорректные данные. Проверьте поля';
+                else if (err.status === 429) error = 'Слишком много попыток. Подождите минуту';
+                else error = `Ошибка сервера (${err.status})`;
             } else {
-                error = 'Не удалось создать аккаунт. Попробуйте ещё раз';
+                error = 'Не удалось создать аккаунт. Проверьте подключение';
                 console.error('Registration failed:', err);
             }
         } finally {

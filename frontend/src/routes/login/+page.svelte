@@ -7,9 +7,9 @@
     import * as Label from '$lib/components/ui/label/index.js';
     import { authApi, ApiError } from '$lib/api';
     import {
-        saltFromEmail,
-        deriveMasterKey,
-        deriveMasterPasswordHash,
+        base64ToBuffer,
+        deriveAuthHash,
+        deriveEncryptionKey,
         unlockVaultKey
     } from '$lib/crypto/crypto';
     import { setSession } from '$lib/stores/auth';
@@ -19,10 +19,71 @@
     let loading = $state(false);
     let error = $state<string | null>(null);
 
-    // Показываем сообщение, если пришли с ?registered=1
     const justRegistered = $derived(page.url.searchParams.get('registered') === '1');
 
-    // ... остальной код без изменений
+    async function handleSubmit(event: SubmitEvent) {
+        event.preventDefault();
+        error = null;
+
+        const trimmedEmail = email.trim().toLowerCase();
+        if (!trimmedEmail || !password) {
+            error = 'Введите email и мастер-пароль';
+            return;
+        }
+
+        loading = true;
+        try {
+            // 1. Соль с сервера.
+            const { crypto_salt } = await authApi.getParams(trimmedEmail);
+            const saltBytes = base64ToBuffer(crypto_salt);
+
+            // 2. auth_hash → на сервер.
+            const authHash = await deriveAuthHash(password, saltBytes);
+
+            // 3. Логин.
+            const response = await authApi.login({
+                email: trimmedEmail,
+                master_password_hash: authHash
+            });
+
+            // 4. Локальная разблокировка vault_key.
+            const encryptionKey = await deriveEncryptionKey(password, saltBytes);
+            let vaultKey: CryptoKey;
+            try {
+                vaultKey = await unlockVaultKey(response.encrypted_vault_key, encryptionKey);
+            } catch (unlockErr) {
+                console.error('Vault unlock failed:', unlockErr);
+                error = 'Не удалось разблокировать хранилище. Проверьте мастер-пароль';
+                return;
+            }
+
+            // 5. Сессия. Соль берём из ответа логина (сервер мог обновить).
+            setSession({
+                token: response.access_token,
+                key: vaultKey,
+                email: trimmedEmail,
+                salt: response.crypto_salt ?? crypto_salt
+            });
+
+            password = '';
+            await goto('/vault');
+        } catch (err) {
+            if (err instanceof ApiError) {
+                if (err.status === 401 || err.status === 404) {
+                    error = 'Неверный email или мастер-пароль';
+                } else if (err.status === 429) {
+                    error = 'Слишком много попыток. Подождите минуту';
+                } else {
+                    error = `Ошибка сервера (${err.status})`;
+                }
+            } else {
+                error = 'Не удалось войти. Проверьте подключение';
+                console.error('Login failed:', err);
+            }
+        } finally {
+            loading = false;
+        }
+    }
 </script>
 
 <div class="flex min-h-screen items-center justify-center p-4">
