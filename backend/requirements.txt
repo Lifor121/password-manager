@@ -1,0 +1,14 @@
+# --- API framework ---
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.29
+
+# --- Валидация ---
+pydantic[email]>=2.7,<3
+pydantic-settings>=2.2,<3
+
+# --- Rate limiting ---
+slowapi>=0.1.9
+# redis>=5
+
+typing-3.7.4.3
+pytest>=8
