@@ -1,18 +1,18 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
     import { page } from '$app/state';
-    import { Button } from '$lib/components/ui/button/index.js';
-    import { Input } from '$lib/components/ui/input/index.js';
-    import * as Card from '$lib/components/ui/card/index.js';
-    import * as Label from '$lib/components/ui/label/index.js';
-    import { authApi, ApiError } from '$lib/api';
+    import { Button } from '#lib/components/ui/button/index.js';
+    import { Input } from '#lib/components/ui/input/index.js';
+    import * as Card from '#lib/components/ui/card/index.js';
+    import * as Label from '#lib/components/ui/label/index.js';
+    import { authApi, ApiError } from '#lib/api';
     import {
         base64ToBuffer,
         deriveAuthHash,
         deriveEncryptionKey,
         unlockVaultKey
-    } from '$lib/crypto/crypto';
-    import { setSession } from '$lib/stores/auth';
+    } from '#lib/crypto/crypto';
+    import { setSession } from '#lib/stores/auth';
 
     let email = $state('');
     let password = $state('');
