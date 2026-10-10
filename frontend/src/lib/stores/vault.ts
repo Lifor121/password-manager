@@ -1,10 +1,10 @@
 // src/lib/stores/vault.ts
 import { writable, derived, get } from 'svelte/store';
-import { vaultApi } from '$lib/api';
+import { vaultApi } from '#lib/api';
 import {
     decryptVaultItem,
     type VaultItemData
-} from '$lib/crypto/crypto';
+} from '#lib/crypto/crypto';
 import { vaultKey } from './auth';
 
 export interface DecryptedVaultItem {

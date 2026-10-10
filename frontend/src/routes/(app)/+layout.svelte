@@ -1,8 +1,8 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
-    import { Button } from '$lib/components/ui/button/index.js';
-    import { authApi } from '$lib/api';
-    import { isAuthenticated, userEmail, clearSession } from '$lib/stores/auth';
+    import { Button } from '#lib/components/ui/button/index.js';
+    import { authApi } from '#lib/api';
+    import { isAuthenticated, userEmail, clearSession } from '#lib/stores/auth';
 
     $effect(() => {
         if (!$isAuthenticated) {
