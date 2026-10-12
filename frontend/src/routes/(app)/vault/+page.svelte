@@ -1,16 +1,16 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
-    import { Input } from '$lib/components/ui/input/index.js';
-    import { Button } from '$lib/components/ui/button/index.js';
-    import * as Card from '$lib/components/ui/card/index.js';
+    import { Input } from '#lib/components/ui/input/index.js';
+    import { Button } from '#lib/components/ui/button/index.js';
+    import * as Card from '#lib/components/ui/card/index.js';
     import {
         filteredVaultItems,
         vaultLoading,
         vaultError,
         vaultSearchQuery,
         loadVault
-    } from '$lib/stores/vault';
+    } from '#lib/stores/vault';
 
     onMount(() => {
         loadVault();

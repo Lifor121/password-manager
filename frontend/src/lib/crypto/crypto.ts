@@ -1,12 +1,13 @@
-// src/lib/crypto/crypto.ts
-
 const PBKDF2_ITERATIONS = 600_000;
 const PBKDF2_HASH = 'SHA-256';
 const KEY_LENGTH = 256;
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
 
-// ---------- Утилиты для base64 <-> Uint8Array ----------
+const ENC_INFO = new TextEncoder().encode('pm:v1:enc');
+const AUTH_INFO = new TextEncoder().encode('pm:v1:auth');
+
+// ---------- base64 helpers ----------
 
 export function bufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
     const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
@@ -26,124 +27,97 @@ export function base64ToBuffer(base64: string): Uint8Array {
     return bytes;
 }
 
-// ---------- Генерация соли / ключей ----------
+// ---------- salt ----------
 
-export function generateSalt(): Uint8Array {
+/** Случайная соль 16 байт — генерируется на регистрации, дальше сервер её хранит. */
+export function generateCryptoSalt(): Uint8Array {
     return crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
 }
 
-/**
- * Генерирует случайный ключ хранилища (Vault Key).
- * Экспортируется как "raw" для дальнейшего шифрования мастер-ключом.
- */
-export async function generateVaultKey(): Promise<CryptoKey> {
-    return crypto.subtle.generateKey(
-        { name: 'AES-GCM', length: KEY_LENGTH },
-        true, // extractable — нужно, чтобы зашифровать его мастер-ключом
-        ['encrypt', 'decrypt']
+/** Соль-домен: расширяем базовую соль инфо-строкой для разделения выводов. */
+function withInfo(salt: Uint8Array, info: Uint8Array): Uint8Array {
+    const combined = new Uint8Array(salt.length + info.length);
+    combined.set(salt, 0);
+    combined.set(info, salt.length);
+    return combined;
+}
+
+// ---------- KDF ----------
+
+async function importPassword(password: string): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(password),
+        'PBKDF2',
+        false,
+        ['deriveKey', 'deriveBits']
     );
 }
 
-// ---------- Деривация мастер-ключа из мастер-пароля ----------
-
 /**
- * Превращает мастер-пароль в CryptoKey через PBKDF2.
- * Этот ключ НИКОГДА не покидает браузер.
+ * Ключ шифрования — им шифруется/расшифровывается vault_key.
+ * НИКОГДА не покидает браузер.
  */
-export async function deriveMasterKey(
+export async function deriveEncryptionKey(
     masterPassword: string,
-    salt: Uint8Array
+    cryptoSalt: Uint8Array
 ): Promise<CryptoKey> {
-    const enc = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey(
-        'raw',
-        enc.encode(masterPassword),
-        { name: 'PBKDF2' },
-        false,
-        ['deriveKey']
-    );
-
+    const keyMaterial = await importPassword(masterPassword);
     return crypto.subtle.deriveKey(
         {
             name: 'PBKDF2',
-            salt,
+            salt: withInfo(cryptoSalt, ENC_INFO),
             iterations: PBKDF2_ITERATIONS,
             hash: PBKDF2_HASH
         },
         keyMaterial,
         { name: 'AES-GCM', length: KEY_LENGTH },
-        false, // мастер-ключ не экспортируем
+        false,
         ['encrypt', 'decrypt']
     );
 }
 
 /**
- * Хэш мастер-пароля для отправки на сервер (аутентификация).
- * Это НЕ мастер-ключ — другой derivation, чтобы компромисс одного
- * не раскрывал другой.
+ * Auth-хеш — строка, которая уходит на сервер для аутентификации.
+ * Это НЕ ключ шифрования: компрометация сервера не даёт расшифровать vault_key.
  */
-export async function deriveMasterPasswordHash(
+export async function deriveAuthHash(
     masterPassword: string,
-    salt: Uint8Array
+    cryptoSalt: Uint8Array
 ): Promise<string> {
-    const enc = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey(
-        'raw',
-        enc.encode(masterPassword),
-        { name: 'PBKDF2' },
-        false,
-        ['deriveBits']
-    );
-
+    const keyMaterial = await importPassword(masterPassword);
     const bits = await crypto.subtle.deriveBits(
         {
             name: 'PBKDF2',
-            salt,
+            salt: withInfo(cryptoSalt, AUTH_INFO),
             iterations: PBKDF2_ITERATIONS,
             hash: PBKDF2_HASH
         },
         keyMaterial,
         KEY_LENGTH
     );
-
     return bufferToBase64(bits);
 }
 
-// ---------- Шифрование / дешифрование ----------
+// ---------- AES-GCM примитивы ----------
 
-/**
- * Шифрует строку данным ключом (AES-GCM).
- * Возвращает строку вида base64(iv || ciphertext).
- */
-export async function encryptString(
-    plaintext: string,
-    key: CryptoKey
-): Promise<string> {
+export async function encryptString(plaintext: string, key: CryptoKey): Promise<string> {
     const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
-    const enc = new TextEncoder();
     const ciphertext = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv },
         key,
-        enc.encode(plaintext)
+        new TextEncoder().encode(plaintext)
     );
-
     const combined = new Uint8Array(iv.length + ciphertext.byteLength);
     combined.set(iv, 0);
     combined.set(new Uint8Array(ciphertext), iv.length);
     return bufferToBase64(combined);
 }
 
-/**
- * Расшифровывает строку, полученную из encryptString.
- */
-export async function decryptString(
-    encrypted: string,
-    key: CryptoKey
-): Promise<string> {
+export async function decryptString(encrypted: string, key: CryptoKey): Promise<string> {
     const combined = base64ToBuffer(encrypted);
     const iv = combined.slice(0, IV_LENGTH);
     const ciphertext = combined.slice(IV_LENGTH);
-
     const plaintext = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv },
         key,
@@ -152,90 +126,114 @@ export async function decryptString(
     return new TextDecoder().decode(plaintext);
 }
 
-// ---------- Специализированные операции ----------
+// ---------- Vault key: генерация / wrap / unwrap ----------
 
-/**
- * Экспортирует Vault Key в base64 (raw), чтобы затем зашифровать его мастер-ключом.
- */
-async function exportKeyRaw(key: CryptoKey): Promise<string> {
-    const raw = await crypto.subtle.exportKey('raw', key);
-    return bufferToBase64(raw);
-}
-
-/**
- * Импортирует Vault Key из base64 (raw).
- */
-async function importKeyRaw(rawBase64: string): Promise<CryptoKey> {
-    const raw = base64ToBuffer(rawBase64);
-    return crypto.subtle.importKey(
-        'raw',
-        raw,
+export async function generateVaultKey(): Promise<CryptoKey> {
+    return crypto.subtle.generateKey(
         { name: 'AES-GCM', length: KEY_LENGTH },
         true,
         ['encrypt', 'decrypt']
     );
 }
 
-/**
- * Регистрация:
- * 1. Генерируем Vault Key.
- * 2. Шифруем его мастер-ключом.
- * 3. Возвращаем зашифрованный vaultKey (base64) для отправки на сервер.
- *    Сам Vault Key тоже возвращаем — он понадобится для работы в текущей сессии.
- */
+async function exportKeyRaw(key: CryptoKey): Promise<string> {
+    return bufferToBase64(await crypto.subtle.exportKey('raw', key));
+}
+
+async function importKeyRaw(rawBase64: string): Promise<CryptoKey> {
+    return crypto.subtle.importKey(
+        'raw',
+        base64ToBuffer(rawBase64),
+        { name: 'AES-GCM', length: KEY_LENGTH },
+        true,
+        ['encrypt', 'decrypt']
+    );
+}
+
+/** Регистрация: генерирует vault_key и возвращает его же в зашифрованном виде. */
 export async function createEncryptedVaultKey(
-    masterKey: CryptoKey
+    encryptionKey: CryptoKey
 ): Promise<{ vaultKey: CryptoKey; encryptedVaultKey: string }> {
     const vaultKey = await generateVaultKey();
     const rawVaultKey = await exportKeyRaw(vaultKey);
-    const encryptedVaultKey = await encryptString(rawVaultKey, masterKey);
+    const encryptedVaultKey = await encryptString(rawVaultKey, encryptionKey);
     return { vaultKey, encryptedVaultKey };
 }
 
-/**
- * Логин:
- * Расшифровываем Vault Key мастер-ключом.
- */
+/** Логин: расшифровывает vault_key ключом шифрования. */
 export async function unlockVaultKey(
     encryptedVaultKey: string,
-    masterKey: CryptoKey
+    encryptionKey: CryptoKey
 ): Promise<CryptoKey> {
-    const rawVaultKey = await decryptString(encryptedVaultKey, masterKey);
+    const rawVaultKey = await decryptString(encryptedVaultKey, encryptionKey);
     return importKeyRaw(rawVaultKey);
 }
 
-// ---------- Работа с записями хранилища ----------
+/** Смена пароля: переупаковывает существующий vault_key новым ключом шифрования. */
+export async function rewrapVaultKey(
+    vaultKey: CryptoKey,
+    newEncryptionKey: CryptoKey
+): Promise<string> {
+    const rawVaultKey = await exportKeyRaw(vaultKey);
+    return encryptString(rawVaultKey, newEncryptionKey);
+}
+
+// ---------- Vault item: раздельные поля ----------
 
 export interface VaultItemData {
     title: string;
-    login: string;
     password: string;
+    login?: string;
     url?: string;
     comment?: string;
 }
 
+export interface EncryptedVaultItemFields {
+    encrypted_title: string;
+    encrypted_password: string;
+    encrypted_login: string | null;
+    encrypted_url: string | null;
+    encrypted_comment: string | null;
+}
+
 /**
- * Шифрует JSON-объект записи в одну строку для отправки на сервер.
+ * Шифрует поля карточки ОТДЕЛЬНО, каждое — со своим nonce.
+ * Пустые опциональные поля → null (не отправляем мусор).
  */
 export async function encryptVaultItem(
     data: VaultItemData,
     vaultKey: CryptoKey
-): Promise<string> {
-    return encryptString(JSON.stringify(data), vaultKey);
+): Promise<EncryptedVaultItemFields> {
+    const enc = (s?: string) =>
+        s && s.length > 0 ? encryptString(s, vaultKey) : Promise.resolve(null);
+
+    return {
+        encrypted_title: await encryptString(data.title, vaultKey),
+        encrypted_password: await encryptString(data.password, vaultKey),
+        encrypted_login: await enc(data.login),
+        encrypted_url: await enc(data.url),
+        encrypted_comment: await enc(data.comment)
+    };
 }
 
-/**
- * Расшифровывает строку от сервера в объект записи.
- */
 export async function decryptVaultItem(
-    encryptedData: string,
+    dto: {
+        encrypted_title: string;
+        encrypted_password: string;
+        encrypted_login?: string | null;
+        encrypted_url?: string | null;
+        encrypted_comment?: string | null;
+    },
     vaultKey: CryptoKey
 ): Promise<VaultItemData> {
-    const json = await decryptString(encryptedData, vaultKey);
-    return JSON.parse(json) as VaultItemData;
-}
+    const dec = (s?: string | null) =>
+        s ? decryptString(s, vaultKey) : Promise.resolve(undefined);
 
-export function saltFromEmail(email: string): Uint8Array {
-    const normalized = email.trim().toLowerCase();
-    return new TextEncoder().encode(normalized);
+    return {
+        title: await decryptString(dto.encrypted_title, vaultKey),
+        password: await decryptString(dto.encrypted_password, vaultKey),
+        login: await dec(dto.encrypted_login),
+        url: await dec(dto.encrypted_url),
+        comment: await dec(dto.encrypted_comment)
+    };
 }

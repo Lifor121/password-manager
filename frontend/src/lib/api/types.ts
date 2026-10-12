@@ -4,6 +4,11 @@ export interface RegisterRequest {
     email: string;
     master_password_hash: string;
     encrypted_vault_key: string;
+    crypto_salt: string;
+}
+
+export interface AuthParamsResponse {
+    crypto_salt: string;
 }
 
 export interface LoginRequest {
@@ -14,9 +19,8 @@ export interface LoginRequest {
 export interface LoginResponse {
     access_token: string;
     encrypted_vault_key: string;
+    crypto_salt: string;
 }
-
-// ---------- Users ----------
 
 export interface ChangePasswordRequest {
     old_password_hash: string;
@@ -26,20 +30,28 @@ export interface ChangePasswordRequest {
 
 // ---------- Vault ----------
 
-/** То, что возвращает сервер по одной записи. */
 export interface VaultItemDto {
-    id: number;
-    encrypted_data: string;
+    id: string; // UUID
+    encrypted_title: string;
+    title_blind_index?: string | null;
+    encrypted_login?: string | null;
+    encrypted_password: string;
+    encrypted_url?: string | null;
+    encrypted_comment?: string | null;
+    created_at: string;
     updated_at: string;
 }
 
-/** Ответ при создании/обновлении. */
-export interface VaultItemMutationResponse {
-    id: number;
-    updated_at: string;
+export interface VaultItemListResponse {
+    items: VaultItemDto[];
+    total: number;
 }
 
-/** Body для создания/обновления. */
-export interface VaultItemPayload {
-    encrypted_data: string;
+export interface VaultItemCreatePayload {
+    encrypted_title: string;
+    encrypted_password: string;
+    encrypted_login?: string | null;
+    encrypted_url?: string | null;
+    encrypted_comment?: string | null;
+    title_blind_index?: string | null;
 }

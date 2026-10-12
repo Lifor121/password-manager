@@ -1,20 +1,16 @@
 import { api } from './client';
 import type {
+    VaultItemCreatePayload,
     VaultItemDto,
-    VaultItemMutationResponse,
-    VaultItemPayload
+    VaultItemListResponse
 } from './types';
 
 export const vaultApi = {
-    list: () => api.get<VaultItemDto[]>('/vault/items'),
-
-    get: (id: number) => api.get<VaultItemDto>(`/vault/items/${id}`),
-
-    create: (data: VaultItemPayload) =>
-        api.post<VaultItemMutationResponse>('/vault/items', data),
-
-    update: (id: number, data: VaultItemPayload) =>
-        api.put<VaultItemMutationResponse>(`/vault/items/${id}`, data),
-
-    remove: (id: number) => api.del<void>(`/vault/items/${id}`)
+    list: () => api.get<VaultItemListResponse>('/vault/items'),
+    get: (id: string) => api.get<VaultItemDto>(`/vault/items/${id}`),
+    create: (data: VaultItemCreatePayload) =>
+        api.post<VaultItemDto>('/vault/items', data),
+    update: (id: string, data: VaultItemCreatePayload) =>
+        api.put<VaultItemDto>(`/vault/items/${id}`, data),
+    remove: (id: string) => api.del<void>(`/vault/items/${id}`)
 };
