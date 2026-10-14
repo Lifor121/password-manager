@@ -1,2 +1,19 @@
+# --- Тестирование ---
 pytest>=8
+pytest-asyncio>=0.23,<1.0
+pytest-cov>=5.0,<6.0
+hypothesis>=6.0,<7.0  # Для property-based тестирования
+
+# --- Линтинг и типы ---
 basedpyright>=1.20
+ruff>=0.4,<1.0
+mypy>=1.10,<2.0
+
+# --- Документация и разработка ---
+ipython>=8.0,<9.0
+black>=24.0,<25.0
+pre-commit>=3.0,<4.0
+
+# --- Моки и фикстуры ---
+pytest-mock>=3.0,<4.0
+factory-boy>=3.0,<4.0

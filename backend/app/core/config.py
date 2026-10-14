@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # --- Размер тела запроса ---
     max_request_body_bytes: int = 3 * 1024 * 1024
 
+    # --- База данных ---
+    database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/password_manager"
+    database_pool_size: int = 5
+    database_max_overflow: int = 10
+    database_echo: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value):
