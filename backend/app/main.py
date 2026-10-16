@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api.routes import health, vault
+from app.api.routes import auth, health, users, vault
 from app.core.config import get_settings
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
 from app.middleware.request_size_limit import RequestSizeLimitMiddleware
@@ -60,3 +60,5 @@ app.add_middleware(
 # --- Роутеры ---------------------------------------------------------------
 app.include_router(health.router)
 app.include_router(vault.router, prefix=settings.api_prefix)
+app.include_router(auth.router, prefix="/api")
+app.include_router(users.router, prefix="/api")

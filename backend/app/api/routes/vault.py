@@ -11,12 +11,15 @@ starlette.responses.Response".
 сессии; Блок 2 проверяет её в БД и берёт user_id.
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from sqlalchemy import select
 
+from app.api.deps import CurrentSession, DbSession
 from app.core.config import get_settings
 from app.core.rate_limit import limiter, session_key
+from app.models.vault_item import VaultItem
 from app.schemas.vault import (
     VaultItemCreate,
     VaultItemListResponse,
@@ -26,14 +29,6 @@ from app.schemas.vault import (
 settings = get_settings()
 router = APIRouter(prefix="/vault", tags=["vault"])
 
-# ВРЕМЕННОЕ in-memory хранилище. Блок 2 заменит его на БД.
-_fake_db: dict[uuid.UUID, VaultItemResponse] = {}
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 @router.post(
     "/items",
     response_model=VaultItemResponse,
@@ -41,38 +36,127 @@ def _utcnow() -> datetime:
 )
 @limiter.limit(settings.rate_limit_write, key_func=session_key)
 async def create_vault_item(
-    request: Request, response: Response, payload: VaultItemCreate
+    request: Request,
+    response: Response,
+    payload: VaultItemCreate,
+    current_session: CurrentSession,
+    db: DbSession,
 ) -> VaultItemResponse:
-    # TODO(Блок 2): session = Depends(get_current_session):
-    #   SELECT ... FROM sessions s JOIN users u ON u.id = s.user_id
-    #   WHERE s.id = :bearer AND s.is_revoked = false AND s.expires_at > now()
-    #   -> 401, если нет. INSERT INTO vault_items ... session.user_id.
-    item = VaultItemResponse(
-        id=uuid.uuid4(),
-        created_at=_utcnow(),
-        updated_at=_utcnow(),
-        **payload.model_dump(),
+    item = VaultItem(
+        user_id=current_session.user_id,
+        encrypted_title=payload.encrypted_title,
+        encrypted_password=payload.encrypted_password,
+        encrypted_login=payload.encrypted_login or "",
+        title_blind_index=payload.title_blind_index or "",
+        encrypted_url=payload.encrypted_url,
+        encrypted_comment=payload.encrypted_comment,
     )
-    _fake_db[item.id] = item
-    return item
-
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return VaultItemResponse.model_validate(item)
 
 @router.get("/items", response_model=VaultItemListResponse)
 @limiter.limit(settings.rate_limit_default)
-async def list_vault_items(request: Request, response: Response) -> VaultItemListResponse:
-    # TODO(Блок 2): WHERE user_id = session.user_id
-    items = list(_fake_db.values())
+async def list_vault_items(
+    request: Request,
+    response: Response,
+    current_session: CurrentSession,
+    db: DbSession,
+) -> VaultItemListResponse:
+    stmt = (
+        select(VaultItem)
+        .where(VaultItem.user_id == current_session.user_id)
+        .order_by(VaultItem.created_at.desc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    items = [VaultItemResponse.model_validate(row) for row in rows]
     return VaultItemListResponse(items=items, total=len(items))
-
 
 @router.get("/items/{item_id}", response_model=VaultItemResponse)
 @limiter.limit(settings.rate_limit_default)
 async def get_vault_item(
-    request: Request, response: Response, item_id: uuid.UUID
+    request: Request,
+    response: Response,
+    item_id: uuid.UUID,
+    current_session: CurrentSession,
+    db: DbSession,
 ) -> VaultItemResponse:
-    # TODO(Блок 2): WHERE id = :item_id AND user_id = session.user_id
-    # -> 404 (не 403: не раскрываем, существует ли чужая карточка)
-    item = _fake_db.get(item_id)
+    stmt = select(VaultItem).where(
+        VaultItem.id == str(item_id),
+        VaultItem.user_id == current_session.user_id,
+    )
+    item = (await db.execute(stmt)).scalar_one_or_none()
     if item is None:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return item
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found",
+        )
+    return VaultItemResponse.model_validate(item)
+
+@router.put("/items/{item_id}", response_model=VaultItemResponse)
+@limiter.limit(settings.rate_limit_write, key_func=session_key)
+async def update_vault_item(
+    request: Request,
+    response: Response,
+    item_id: uuid.UUID,
+    payload: VaultItemCreate,
+    current_session: CurrentSession,
+    db: DbSession,
+) -> VaultItemResponse:
+    stmt = select(VaultItem).where(
+        VaultItem.id == str(item_id),
+        VaultItem.user_id == current_session.user_id,
+    )
+    item = (await db.execute(stmt)).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found",
+        )
+
+    item.update_from_encrypted_data(
+        encrypted_title=payload.encrypted_title,
+        title_blind_index=payload.title_blind_index or "",
+        encrypted_login=payload.encrypted_login or "",
+        encrypted_password=payload.encrypted_password,
+        encrypted_url=payload.encrypted_url,
+        encrypted_comment=payload.encrypted_comment,
+    )
+    item.updated_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(item)
+    return VaultItemResponse.model_validate(item)
+
+@router.delete(
+    "/items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+@limiter.limit(settings.rate_limit_write, key_func
+
+
+=session_key)
+async def delete_vault_item(
+    request: Request,
+    response: Response,
+    item_id: uuid.UUID,
+    current_session: CurrentSession,
+    db: DbSession,
+) -> Response:
+    stmt = select(VaultItem).where(
+        VaultItem.id == str(item_id),
+        VaultItem.user_id == current_session.user_id,
+    )
+    item = (await db.execute(stmt)).scalar_one_or_none()
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Item not found",
+        )
+
+    await db.delete(item)
+    await db.commit()
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
