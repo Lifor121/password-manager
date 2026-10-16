@@ -90,3 +90,7 @@ class ChangePasswordRequest(BaseModel):
     @classmethod
     def _clean_credentials(cls, v: str) -> str:
         return _clean_credential(v)
+
+class AuthParamsResponse(BaseModel):
+    """200 от GET /api/auth/params"""
+    crypto_salt: str
