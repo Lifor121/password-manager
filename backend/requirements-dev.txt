@@ -3,6 +3,8 @@ pytest>=8
 pytest-asyncio>=0.23,<1.0
 pytest-cov>=5.0,<6.0
 hypothesis>=6.0,<7.0  # Для property-based тестирования
+httpx2
+aiosqlite
 
 # --- Линтинг и типы ---
 basedpyright>=1.20
