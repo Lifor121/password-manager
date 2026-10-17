@@ -70,8 +70,11 @@ def upgrade() -> None:
     
     # Дополнительные индексы
     op.create_index('idx_sessions_id', 'sessions', ['id'], unique=False)
-    op.create_index('idx_sessions_active', 'sessions', ['user_id'], 
-                    postgresql_where=sa.text('is_revoked = FALSE AND expires_at > CURRENT_TIMESTAMP'), 
+    # Частичный индекс активных сессий. В предикате индекса PostgreSQL допускает
+    # только IMMUTABLE-выражения, поэтому условие по expires_at (CURRENT_TIMESTAMP
+    # — STABLE) здесь опустить нельзя, фильтруем только по is_revoked.
+    op.create_index('idx_sessions_active', 'sessions', ['user_id'],
+                    postgresql_where=sa.text('is_revoked = FALSE'),
                     unique=False)
     
     # ### end Alembic commands ###

@@ -19,8 +19,12 @@ from app.models.base import Base
 config = context.config
 
 # Получаем URL базы данных из настроек приложения
+# (asyncpg вместо psycopg2: alembic работает через asyncio-движок)
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option(
+    "sqlalchemy.url",
+    settings.database_url.replace("postgresql+psycopg2://", "postgresql+asyncpg://"),
+)
 
 # Configure logging
 if config.config_file_name is not None:
