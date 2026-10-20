@@ -1,14 +1,13 @@
 """
 Тесты для моделей базы данных.
 """
-import uuid
 from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
 from app.models.session import Session
+from app.models.user import User
 from app.models.vault_item import VaultItem
 
 

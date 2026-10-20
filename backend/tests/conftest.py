@@ -3,7 +3,7 @@
 """
 import asyncio
 import uuid
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
@@ -12,7 +12,6 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.database import Base
 from app.models.user import User
-
 
 # Тестовая база данных (SQLite в памяти для изоляции тестов)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -87,6 +86,7 @@ async def test_user(db_session: AsyncSession) -> User:
 async def test_session(db_session: AsyncSession, test_user: User):
     """Фикстура для тестовой сессии"""
     from datetime import datetime, timedelta
+
     from app.models.session import Session
     
     session = Session(

@@ -1,9 +1,10 @@
 import base64
 
 import pytest
+from pydantic import ValidationError
+
 from app.schemas.auth import ChangePasswordRequest, LoginRequest, RegisterRequest
 from app.schemas.vault import VaultItemCreate
-from pydantic import ValidationError
 
 b64 = lambda s: base64.b64encode(s).decode()
 

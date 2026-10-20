@@ -2,6 +2,17 @@
 line-length = 88
 target-version = "py312"
 
+[tool.ruff.lint]
+ignore = [
+    "E501",   # line too long
+    "DTZ",    # datetime.utcnow() deprecation
+    "B008",   # do not perform function calls in argument defaults (FastAPI Depends)
+    "RUF022", # __all__ sorting
+    "E731",   # lambda assignment in tests
+    "BLE001", # blind exception in scripts
+    "EXE001", # shebang executable check
+]
+
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true

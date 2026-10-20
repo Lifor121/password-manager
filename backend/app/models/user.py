@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from sqlalchemy import String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -23,13 +23,13 @@ class User(Base, UUIDMixin, TimestampMixin):
     encrypted_vault_key: Mapped[str] = mapped_column(Text, nullable=False)  # Зашифрованный симметричный ключ хранилища
     
     # Связи
-    sessions: Mapped[List["Session"]] = relationship(
+    sessions: Mapped[list["Session"]] = relationship(
         "Session", 
         back_populates="user", 
         cascade="all, delete-orphan"
     )
     
-    vault_items: Mapped[List["VaultItem"]] = relationship(
+    vault_items: Mapped[list["VaultItem"]] = relationship(
         "VaultItem", 
         back_populates="user", 
         cascade="all, delete-orphan"

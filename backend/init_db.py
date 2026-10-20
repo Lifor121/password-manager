@@ -10,20 +10,17 @@
   test    - загрузить тестовые данные
 """
 
-import sys
 import asyncio
-from typing import List
 
 import click
 from sqlalchemy import text
 
-from app.core.database import init_db, drop_db, AsyncSessionLocal
+from app.core.database import AsyncSessionLocal, drop_db, init_db
 
 
 @click.group()
 def cli():
     """CLI для управления базой данных"""
-    pass
 
 
 @cli.command()
@@ -98,7 +95,7 @@ def check():
             async with AsyncSessionLocal() as session:
                 result = await session.execute(text("SELECT version()"))
                 version = result.scalar()
-                print(f"✅ Подключение к PostgreSQL успешно")
+                print("✅ Подключение к PostgreSQL успешно")
                 print(f"   Версия: {version}")
                 
                 # Проверка существования таблиц
@@ -126,10 +123,8 @@ def check():
 @cli.command()
 def tables_sql():
     """Показать SQL для создания таблиц"""
+    from app.core.database import engine
     from app.models.base import Base
-    from app.models.user import User
-    from app.models.session import Session
-    from app.models.vault_item import VaultItem
     
     print("-- SQL для создания таблиц базы данных менеджера паролей")
     print("-- Сгенерировано автоматически из SQLAlchemy моделей")
@@ -143,7 +138,7 @@ def tables_sql():
     print("-- Индексы:")
     for table in Base.metadata.sorted_tables:
         for index in table.indexes:
-            print(f"-- {index.name}: {str(index.compile(engine))}")
+            print(f"-- {index.name}: {index.compile(engine)!s}")
 
 
 if __name__ == "__main__":
