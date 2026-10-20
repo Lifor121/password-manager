@@ -20,6 +20,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+    networks:
+      - default
 
   backend:
     build: ./backend
@@ -34,6 +36,8 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-password_manager}
       RATE_LIMIT_STORAGE_URI: ${RATE_LIMIT_STORAGE_URI:-}
+    networks:
+      - default
     # Порт backend наружу не публикуем — доступ идёт через nginx фронтенда.
 
   frontend:
@@ -44,6 +48,17 @@ services:
         condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-8080}:80"
+    networks:
+      default:
+      proxy-net:
+        aliases:
+          - password-manager-frontend
 
 volumes:
   pgdata:
+
+networks:
+  default:
+  proxy-net:
+    name: ${PROXY_NETWORK:-proxy-net}
+    external: ${EXTERNAL_PROXY_NET:-false}

@@ -119,13 +119,15 @@ jobs:
           ENVIRONMENT: ${{ secrets.ENVIRONMENT }}
           DEBUG: ${{ secrets.DEBUG }}
           DOCS_ENABLED: ${{ secrets.DOCS_ENABLED }}
+          EXTERNAL_PROXY_NET: ${{ secrets.EXTERNAL_PROXY_NET || 'true' }}
+          PROXY_NETWORK: ${{ secrets.PROXY_NETWORK || 'proxy-net' }}
           ENV_CONTENT: ${{ secrets.ENV_CONTENT }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          envs: DEPLOY_PATH,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB,FRONTEND_PORT,CORS_ORIGINS,ENVIRONMENT,DEBUG,DOCS_ENABLED,ENV_CONTENT
+          envs: DEPLOY_PATH,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB,FRONTEND_PORT,CORS_ORIGINS,ENVIRONMENT,DEBUG,DOCS_ENABLED,EXTERNAL_PROXY_NET,PROXY_NETWORK,ENV_CONTENT
           script_stop: true
           script: |
             set -e
@@ -158,6 +160,8 @@ jobs:
             DOCS_ENABLED=${DOCS_ENABLED:-false}
             CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8080}
             RATE_LIMIT_STORAGE_URI=
+            EXTERNAL_PROXY_NET=${EXTERNAL_PROXY_NET:-true}
+            PROXY_NETWORK=${PROXY_NETWORK:-proxy-net}
             EOF
               echo "Generated .env using GitHub Secrets."
             elif [ -f .env ]; then

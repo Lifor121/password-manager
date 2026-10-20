@@ -42,23 +42,24 @@ ports:
 ```
 Frontend-контейнер (Nginx) внутри слушает порт `80` и сам проксирует запросы `/api/*` на бэкенд (`backend:8000`).
 
-Поэтому в **Nginx Proxy Manager** нужно настроить Proxy Host на порт фронтенда:
+Поэтому в **Nginx Proxy Manager** (когда он и фронтенд находятся в сети `proxy-net`) Proxy Host настраивается напрямую по имени контейнера и порту 80:
 
-### Параметры Proxy Host в NPM:
+### Параметры Proxy Host в NPM (сеть `proxy-net`):
 
 | Поле в NPM | Значение | Пояснение |
 |---|---|---|
 | **Domain Names** | `passwords.example.com` (ваш домен) | Домен, по которому будет открываться менеджер |
 | **Scheme** | `http` | Внутреннее соединение между NPM и приложением |
-| **Forward Hostname / IP** | `IP_сервера` или `172.17.0.1` | Если NPM запущен в Docker на том же сервере, укажите шлюз Docker-моста (`172.17.0.1` или `host.docker.internal`), либо локальный IP сервера |
-| **Forward Port** | **`8080`** | **Порт по умолчанию** (значение переменной `FRONTEND_PORT`) |
+| **Forward Hostname / IP** | `password-manager-frontend` | Имя алиаса сервиса в сети `proxy-net` (также доступно `frontend`) |
+| **Forward Port** | **`80`** | **Внутренний порт контейнера frontend** |
 | **Cache Assets** | `Включено` (по желанию) | Кэширование статики |
 | **Block Common Exploits** | `Включено` | Защита от типовых атак |
 | **Websockets Support** | `Включено` | Рекомендуется для SPA и сокетов |
 
-> [!TIP]
-> Если вы измените `FRONTEND_PORT` в `.env` (например, на `9090` из-за занятого порта 8080), то в Nginx Proxy Manager укажите соответствующий порт (`9090`).
-> Если же контейнер NPM находится в **одной Docker-сети** со стеком `password-manager`, в Forward Hostname можно указать имя контейнера `frontend`, а Forward Port — `80`.
+> [!NOTE]
+> В `docker-compose.yml` настроена универсальная интеграция:
+> - **На сервере:** в `.env` задано `EXTERNAL_PROXY_NET=true`, контейнер подключается к существующей сети `proxy-net`, а NPM проксирует на `password-manager-frontend:80`.
+> - **Локально:** `EXTERNAL_PROXY_NET=false` (по умолчанию), Compose автоматически создаёт локальную сеть и приложение доступно на `http://localhost:8080`.
 
 ### Вкладка SSL в NPM:
 - **SSL Certificate**: Request a new SSL Certificate (Let's Encrypt).
