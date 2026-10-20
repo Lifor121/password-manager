@@ -13,6 +13,7 @@ docker compose up -d --build
 Приложение: **http://localhost:8080**
 
 Полная инструкция по развёртыванию, настройке и эксплуатации: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+Инструкция по CI/CD, GitHub Secrets и Nginx Proxy Manager: [docs/CICD.md](docs/CICD.md)
 
 ## Структура
 

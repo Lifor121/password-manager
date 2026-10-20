@@ -1,0 +1,185 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Deploy to server regardless of branch'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  backend-ci:
+    name: Backend CI (Lint & Test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Ruff (Linting)
+        run: ruff check .
+
+      - name: Run Mypy (Type checking)
+        run: mypy app
+
+      - name: Run Pytest with Coverage
+        run: pytest -v --cov=app --cov-report=term-missing
+
+  frontend-ci:
+    name: Frontend CI (Lint, Check & Build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Code style & linting (Prettier + ESLint)
+        run: npm run lint
+
+      - name: SvelteKit type check
+        run: npm run check
+
+      - name: Install Playwright browsers (for Vitest)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run frontend tests
+        run: npm run test
+
+      - name: Build production bundle
+        run: npm run build
+
+  docker-ci:
+    name: Docker Compose Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose Configuration
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+
+  deploy:
+    name: Deploy to Production
+    needs: [backend-ci, frontend-ci, docker-ci]
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || inputs.force_deploy == true))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          FRONTEND_PORT: ${{ secrets.FRONTEND_PORT }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          ENVIRONMENT: ${{ secrets.ENVIRONMENT }}
+          DEBUG: ${{ secrets.DEBUG }}
+          DOCS_ENABLED: ${{ secrets.DOCS_ENABLED }}
+          EXTERNAL_PROXY_NET: ${{ secrets.EXTERNAL_PROXY_NET || 'true' }}
+          PROXY_NETWORK: ${{ secrets.PROXY_NETWORK || 'proxy-net' }}
+          ENV_CONTENT: ${{ secrets.ENV_CONTENT }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: DEPLOY_PATH,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB,FRONTEND_PORT,CORS_ORIGINS,ENVIRONMENT,DEBUG,DOCS_ENABLED,EXTERNAL_PROXY_NET,PROXY_NETWORK,ENV_CONTENT
+          script_stop: true
+          script: |
+            set -e
+            TARGET_DIR="${DEPLOY_PATH:-/opt/password-manager}"
+            echo "==> Deploying to ${TARGET_DIR}..."
+
+            if [ ! -d "${TARGET_DIR}" ]; then
+              echo "Error: Directory ${TARGET_DIR} does not exist. Please clone the repository first."
+              exit 1
+            fi
+
+            cd "${TARGET_DIR}"
+
+            echo "==> Pulling latest changes from main branch..."
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "==> Checking configuration (.env)..."
+            if [ -n "${ENV_CONTENT}" ]; then
+              echo "${ENV_CONTENT}" > .env
+              echo "Created .env from ENV_CONTENT secret."
+            elif [ -n "${POSTGRES_PASSWORD}" ]; then
+              cat > .env << EOF
+            POSTGRES_USER=${POSTGRES_USER:-postgres}
+            POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+            POSTGRES_DB=${POSTGRES_DB:-password_manager}
+            FRONTEND_PORT=${FRONTEND_PORT:-8080}
+            ENVIRONMENT=${ENVIRONMENT:-production}
+            DEBUG=${DEBUG:-false}
+            DOCS_ENABLED=${DOCS_ENABLED:-false}
+            CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8080}
+            RATE_LIMIT_STORAGE_URI=
+            EXTERNAL_PROXY_NET=${EXTERNAL_PROXY_NET:-true}
+            PROXY_NETWORK=${PROXY_NETWORK:-proxy-net}
+            EOF
+              echo "Generated .env using GitHub Secrets."
+            elif [ -f .env ]; then
+              echo "Using existing .env file on server."
+            else
+              echo "Error: .env file is missing and neither POSTGRES_PASSWORD nor ENV_CONTENT was provided!"
+              exit 1
+            fi
+
+            echo "==> Building and deploying containers with Docker Compose..."
+            docker compose pull --ignore-buildable || true
+            docker compose up -d --build --remove-orphans
+
+            echo "==> Waiting for services to initialize..."
+            sleep 10
+            docker compose ps
+
+            echo "==> Cleaning up unused Docker images..."
+            docker image prune -f
+
+            echo "==> Deployment completed successfully!"
