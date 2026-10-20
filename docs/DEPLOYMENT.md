@@ -96,7 +96,9 @@ docker compose exec backend python init_db.py check
 ## Продакшен-рекомендации
 
 1. **Пароли.** Задайте реальный `POSTGRES_PASSWORD` в `.env`; файл `.env` не коммитится (в `.gitignore`).
-2. **HTTPS.** nginx в образе слушает только HTTP. Поставьте перед приложением Reverse-proxy с TLS — готовое решение: [Traefik](https://traefik.io/) или [Caddy](https://caddyserver.com/), либо корпоративный nginx/certbot. Простейший вариант с nginx+certbot описан [здесь](https://certbot.eff.org/instructions?ws=nginx&os=debian).
+2. **HTTPS и Reverse-proxy (Nginx Proxy Manager / Traefik / Caddy).** nginx в образе слушает только HTTP. Поставьте перед приложением Reverse-proxy с TLS:
+   - При использовании **Nginx Proxy Manager** укажите Forward Hostname: IP вашего сервера (или `172.17.0.1` если NPM в Docker), а Forward Port: **`8080`** (или ваше значение `FRONTEND_PORT`).
+   - Подробнее о настройке NPM и автоматическом деплое см. [docs/CICD.md](CICD.md).
 3. **Бэкапы БД.**
 
    ```bash
