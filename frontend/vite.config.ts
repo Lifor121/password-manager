@@ -17,15 +17,15 @@ export default defineConfig({
 			// раздаётся nginx в Docker и проксирует /api на backend.
 			adapter: adapter({ fallback: 'index.html' })
 		})
-  ],
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true
-      }
-    }
-  },
+	],
+	server: {
+		proxy: {
+			'/api': {
+				target: 'http://localhost:8000',
+				changeOrigin: true
+			}
+		}
+	},
 	test: {
 		expect: { requireAssertions: true },
 		projects: [

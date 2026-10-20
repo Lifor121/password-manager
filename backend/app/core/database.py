@@ -1,8 +1,8 @@
+from collections.abc import AsyncGenerator, Generator
 from contextlib import contextmanager
-from typing import Generator
 
-from sqlalchemy import create_engine, Engine
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import get_settings
@@ -64,7 +64,7 @@ def get_sync_session() -> Generator:
         session.close()
 
 
-async def get_async_session() -> AsyncSession:
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     """Асинхронная зависимость для FastAPI"""
     async with AsyncSessionLocal() as session:
         try:
@@ -79,12 +79,14 @@ async def get_async_session() -> AsyncSession:
 
 async def get_db_session() -> AsyncSession:
     """Альтернативное имя для обратной совместимости"""
-    return await get_async_session().__anext__()
+    async for session in get_async_session():
+        return session
+    raise RuntimeError("Failed to get DB session")
 
 
 # Экспорт моделей для удобного импорта
-from app.models.user import User
 from app.models.session import Session
+from app.models.user import User
 from app.models.vault_item import VaultItem
 
 __all__ = [

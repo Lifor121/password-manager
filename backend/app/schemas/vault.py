@@ -8,7 +8,6 @@ import base64
 import binascii
 import re
 from datetime import datetime
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -43,14 +42,14 @@ class VaultItemCreate(BaseModel):
 
     encrypted_title: str = Field(min_length=1, max_length=TITLE_CIPHERTEXT_MAX)
     encrypted_password: str = Field(min_length=1, max_length=FIELD_CIPHERTEXT_MAX)
-    encrypted_login: Optional[str] = Field(default=None, max_length=FIELD_CIPHERTEXT_MAX)
-    encrypted_url: Optional[str] = Field(default=None, max_length=FIELD_CIPHERTEXT_MAX)
-    encrypted_comment: Optional[str] = Field(default=None, max_length=FIELD_CIPHERTEXT_MAX)
+    encrypted_login: str | None = Field(default=None, max_length=FIELD_CIPHERTEXT_MAX)
+    encrypted_url: str | None = Field(default=None, max_length=FIELD_CIPHERTEXT_MAX)
+    encrypted_comment: str | None = Field(default=None, max_length=FIELD_CIPHERTEXT_MAX)
     # Слепой индекс для СЕРВЕРНОГО поиска по названию. Считает КЛИЕНТ:
     # HMAC-SHA256(нормализованный title, ключ выведен из vault_key) —
     # ключа нет у сервера, иначе смысл индекса теряется (утечка БД +
     # ключа = перебор популярных названий). Поиск на клиенте — не шлём.
-    title_blind_index: Optional[str] = None
+    title_blind_index: str | None = None
 
     @field_validator("encrypted_title")
     @classmethod
@@ -64,14 +63,14 @@ class VaultItemCreate(BaseModel):
 
     @field_validator("encrypted_login", "encrypted_url", "encrypted_comment")
     @classmethod
-    def _check_optional_fields(cls, v: Optional[str]) -> Optional[str]:
+    def _check_optional_fields(cls, v: str | None) -> str | None:
         if v is None or not v.strip():
             return None
         return _validate_base64(v, FIELD_CIPHERTEXT_MAX)
 
     @field_validator("title_blind_index")
     @classmethod
-    def _check_blind_index(cls, v: Optional[str]) -> Optional[str]:
+    def _check_blind_index(cls, v: str | None) -> str | None:
         if v is None or not v.strip():
             return None
         v = v.strip().lower()
@@ -85,11 +84,11 @@ class VaultItemResponse(BaseModel):
 
     id: UUID
     encrypted_title: str
-    title_blind_index: Optional[str] = None
-    encrypted_login: Optional[str] = None
+    title_blind_index: str | None = None
+    encrypted_login: str | None = None
     encrypted_password: str
-    encrypted_url: Optional[str] = None
-    encrypted_comment: Optional[str] = None
+    encrypted_url: str | None = None
+    encrypted_comment: str | None = None
     created_at: datetime
     updated_at: datetime
 

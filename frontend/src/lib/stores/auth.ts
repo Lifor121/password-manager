@@ -9,21 +9,21 @@ export const cryptoSalt = writable<string | null>(null);
 export const isAuthenticated = derived(accessToken, ($t) => $t !== null);
 
 export function setSession(params: {
-    token: string;
-    key: CryptoKey;
-    email: string;
-    salt: string;
+	token: string;
+	key: CryptoKey;
+	email: string;
+	salt: string;
 }): void {
-    accessToken.set(params.token);
-    vaultKey.set(params.key);
-    userEmail.set(params.email);
-    cryptoSalt.set(params.salt);
+	accessToken.set(params.token);
+	vaultKey.set(params.key);
+	userEmail.set(params.email);
+	cryptoSalt.set(params.salt);
 }
 
 export function clearSession(): void {
-    accessToken.set(null);
-    vaultKey.set(null);
-    userEmail.set(null);
-    cryptoSalt.set(null);
-    resetVault();
+	accessToken.set(null);
+	vaultKey.set(null);
+	userEmail.set(null);
+	cryptoSalt.set(null);
+	resetVault();
 }
